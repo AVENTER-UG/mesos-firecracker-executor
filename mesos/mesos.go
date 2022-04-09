@@ -96,6 +96,33 @@ func Subscribe() error {
 		case executor.Event_SUBSCRIBED:
 			logrus.Debug(event)
 			logrus.Info("Subscribed")
+		case executor.Event_MESSAGE:
+			logrus.Debug(event)
+			logrus.Info("Message")
+		case executor.Event_LAUNCH_GROUP:
+			logrus.Debug(event)
+			logrus.Info("Launch Group")
+		case executor.Event_LAUNCH:
+			logrus.Debug(event)
+			logrus.Info("Launch")
+		case executor.Event_ACKNOWLEDGED:
+			logrus.Debug(event)
+			logrus.Info("Acknowledged")
+		case executor.Event_ERROR:
+			logrus.Debug(event)
+			logrus.Info("Error")
+		case executor.Event_KILL:
+			logrus.Debug(event)
+			logrus.Info("Kill")
+		case executor.Event_SHUTDOWN:
+			logrus.Debug(event)
+			logrus.Info("Shutdown")
+		case executor.Event_UNKNOWN:
+			logrus.Debug(event)
+			logrus.Info("Unknown")
+		case executor.Event_HEARTBEAT:
+			logrus.Debug(event)
+			logrus.Info("Heartbeat")
 
 		default:
 			logrus.Debug("DEFAULT EVENT: ", event.Type)
