@@ -26,10 +26,15 @@ build:
 
 build-almalinux8:
 	@echo ">>>> Build binary for almalinux8"
-	@docker run -e GOPATH=/tmp -e GOCACHE=/tmp -e CGO_ENABLED=0 -e GOOS=linux -u ${UID}:${GID} -w /data -v ${PWD}:/data avhost/almalinux8_rpmbuild go build -o /data/mesos-mainframe-executor . 
+	@docker run --rm -e GOPATH=/tmp -e GOCACHE=/tmp -e CGO_ENABLED=0 -e GOOS=linux -u ${UID}:${GID} -w /data -v ${PWD}:/data avhost/almalinux8_rpmbuild go build -o /data/mesos-mainframe-executor . 
+	@cp mesos-mainframe-executor http/
+
+publish-http:
+	@echo ">>>> Publish via http"
+	@docker run --rm -p 8888:8080 -v ${PWD}/http:/var/www/htdocs -i avhost/docker-lighttpd:v0.1.0
 
 docs:
 	@echo ">>>> Build docs"
 	$(MAKE) -C $@
 
-all: build 
+all: build
