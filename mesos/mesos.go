@@ -43,7 +43,10 @@ func Subscribe() error {
 		ExecutorID: mesosproto.ExecutorID{
 			Value: config.ExecutorID,
 		},
-		Subscribe: &executor.Call_Subscribe{},
+		Subscribe: &executor.Call_Subscribe{
+			UnacknowledgedTasks:   []mesosproto.TaskInfo{},
+			UnacknowledgedUpdates: []executor.Call_Update{},
+		},
 	}
 	logrus.Debug(subscribeCall)
 	body, _ := marshaller.MarshalToString(subscribeCall)
@@ -91,12 +94,15 @@ func Subscribe() error {
 		case executor.Event_SUBSCRIBED:
 			logrus.Debug(event)
 			logrus.Info("Subscribed")
+			logrus.Info("ExecutorId: ", event.Subscribed.ExecutorInfo.ExecutorID)
+
 		case executor.Event_MESSAGE:
 			logrus.Debug(event)
 			logrus.Info("Message")
 		case executor.Event_LAUNCH_GROUP:
 			logrus.Debug(event)
 			logrus.Info("Launch Group")
+
 		case executor.Event_LAUNCH:
 			logrus.Debug(event)
 			logrus.Info("Launch")
@@ -123,4 +129,30 @@ func Subscribe() error {
 			logrus.Debug("DEFAULT EVENT: ", event.Type)
 		}
 	}
+}
+
+// Call will send messages to mesos
+func Call(message *executor.Call) {
+	body, _ := marshaller.MarshalToString(message)
+
+	client := &http.Client{}
+	client.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	protocol := "https"
+	if !framework.MesosSSL {
+		protocol = "http"
+	}
+	req, _ := http.NewRequest("POST", protocol+"://"+config.MesosAgentHostname+"/api/v1/executor", bytes.NewBuffer([]byte(body)))
+	req.Close = true
+	req.SetBasicAuth(framework.Username, framework.Password)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := client.Do(req)
+
+	if err != nil {
+		logrus.Debug("Call Message: ", err)
+	}
+
+	defer res.Body.Close()
 }

@@ -10,5 +10,10 @@ type Config struct {
 	FrameworkID        string
 	AgentID            string
 	ExecutorID         string
+	ExecutorHostname   string
+	ExecutorPort       string
 	SkipSSL            bool
+	SSLKey             string
+	SSLCrt             string
+	Listen             string
 }

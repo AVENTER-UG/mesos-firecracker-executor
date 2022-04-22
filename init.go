@@ -14,6 +14,7 @@ var config cfg.Config
 var framework mesosutil.FrameworkConfig
 
 func init() {
+
 	config.MesosAgentHostname = os.Getenv("MESOS_AGENT_ENDPOINT")
 	config.AgentID = os.Getenv("MESOS_SLAVE_ID")
 	config.ExecutorID = os.Getenv("MESOS_EXECUTOR_ID")
