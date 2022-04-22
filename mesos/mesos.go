@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"net/http"
-	"strconv"
 	"strings"
 
 	executor "github.com/AVENTER-UG/mesos-mainframe-executor/executor"
@@ -44,7 +43,10 @@ func Subscribe() error {
 		ExecutorID: mesosproto.ExecutorID{
 			Value: config.ExecutorID,
 		},
-		Subscribe: &executor.Call_Subscribe{},
+		Subscribe: &executor.Call_Subscribe{
+			UnacknowledgedTasks:   []mesosproto.TaskInfo{},
+			UnacknowledgedUpdates: []executor.Call_Update{},
+		},
 	}
 	logrus.Debug(subscribeCall)
 	body, _ := marshaller.MarshalToString(subscribeCall)
@@ -74,18 +76,14 @@ func Subscribe() error {
 	reader := bufio.NewReader(res.Body)
 
 	line, _ := reader.ReadString('\n')
-	bytesCount, _ := strconv.Atoi(strings.Trim(line, "\n"))
+	line = strings.TrimSuffix(line, "\n")
 
 	for {
 		// Read line from Mesos
 		line, _ = reader.ReadString('\n')
-		line = strings.Trim(line, "\n")
-		// Read important data
-		data := line[:bytesCount]
-		// Rest data will be bytes of next message
-		bytesCount, _ = strconv.Atoi((line[bytesCount:]))
+		line = strings.TrimSuffix(line, "\n")
 		var event executor.Event
-		err := jsonpb.UnmarshalString(data, &event)
+		err := jsonpb.UnmarshalString(line, &event)
 		if err != nil {
 			logrus.Error("Error during unmarshal: ", err.Error())
 			return err
@@ -96,9 +94,65 @@ func Subscribe() error {
 		case executor.Event_SUBSCRIBED:
 			logrus.Debug(event)
 			logrus.Info("Subscribed")
+			logrus.Info("ExecutorId: ", event.Subscribed.ExecutorInfo.ExecutorID)
+
+		case executor.Event_MESSAGE:
+			logrus.Debug(event)
+			logrus.Info("Message")
+		case executor.Event_LAUNCH_GROUP:
+			logrus.Debug(event)
+			logrus.Info("Launch Group")
+
+		case executor.Event_LAUNCH:
+			logrus.Debug(event)
+			logrus.Info("Launch")
+		case executor.Event_ACKNOWLEDGED:
+			logrus.Debug(event)
+			logrus.Info("Acknowledged")
+		case executor.Event_ERROR:
+			logrus.Debug(event)
+			logrus.Info("Error")
+		case executor.Event_KILL:
+			logrus.Debug(event)
+			logrus.Info("Kill")
+		case executor.Event_SHUTDOWN:
+			logrus.Debug(event)
+			logrus.Info("Shutdown")
+		case executor.Event_UNKNOWN:
+			logrus.Debug(event)
+			logrus.Info("Unknown")
+		case executor.Event_HEARTBEAT:
+			logrus.Debug(event)
+			logrus.Info("Heartbeat")
 
 		default:
 			logrus.Debug("DEFAULT EVENT: ", event.Type)
 		}
 	}
+}
+
+// Call will send messages to mesos
+func Call(message *executor.Call) {
+	body, _ := marshaller.MarshalToString(message)
+
+	client := &http.Client{}
+	client.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
+	protocol := "https"
+	if !framework.MesosSSL {
+		protocol = "http"
+	}
+	req, _ := http.NewRequest("POST", protocol+"://"+config.MesosAgentHostname+"/api/v1/executor", bytes.NewBuffer([]byte(body)))
+	req.Close = true
+	req.SetBasicAuth(framework.Username, framework.Password)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := client.Do(req)
+
+	if err != nil {
+		logrus.Debug("Call Message: ", err)
+	}
+
+	defer res.Body.Close()
 }
