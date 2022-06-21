@@ -1,3 +1,2 @@
-# PoT: Mesos Mainframe Executor
+# Mesos Firecracker Executor
 
-This executor for Apache Mesos should proof to execute workload on a IBM Mainframe.

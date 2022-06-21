@@ -1,10 +1,7 @@
 package main
 
 import (
-	"flag"
-	"fmt"
-
-	"github.com/AVENTER-UG/mesos-mainframe-executor/mesos"
+	"github.com/AVENTER-UG/mesos-firecracker-executor/mesos"
 	mesosutil "github.com/AVENTER-UG/mesos-util"
 	util "github.com/AVENTER-UG/util"
 	"github.com/sirupsen/logrus"
@@ -17,14 +14,6 @@ var BuildVersion string
 var GitVersion string
 
 func main() {
-	// Prints out current version
-	var version bool
-	flag.BoolVar(&version, "v", false, "Prints current version")
-	flag.Parse()
-	if version {
-		fmt.Print(GitVersion)
-		return
-	}
 
 	util.SetLogging(config.LogLevel, config.EnableSyslog, config.AppName)
 	logrus.Println(config.AppName + " build " + BuildVersion + " git " + GitVersion)
@@ -32,5 +21,8 @@ func main() {
 	mesosutil.SetConfig(&framework)
 	mesos.SetConfig(&config, &framework)
 
-	logrus.Fatal(mesos.Subscribe())
+	// Create and run the executor
+	if err := mesos.Executor(); err != nil {
+		logrus.Fatal("An error occured while running the executor")
+	}
 }

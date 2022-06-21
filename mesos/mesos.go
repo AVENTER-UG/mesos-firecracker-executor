@@ -6,19 +6,18 @@ import (
 	"crypto/tls"
 	"net/http"
 	"strings"
-
-	executor "github.com/AVENTER-UG/mesos-mainframe-executor/executor"
-	cfg "github.com/AVENTER-UG/mesos-mainframe-executor/types"
-	mesosutil "github.com/AVENTER-UG/mesos-util"
-	mesosproto "github.com/AVENTER-UG/mesos-util/proto"
-	"github.com/sirupsen/logrus"
+	"time"
 
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/sirupsen/logrus"
+
+	"github.com/AVENTER-UG/mesos-firecracker-executor/executor"
+	cfg "github.com/AVENTER-UG/mesos-firecracker-executor/types"
+	mesosutil "github.com/AVENTER-UG/mesos-util"
+	mesosproto "github.com/AVENTER-UG/mesos-util/proto"
 )
 
-// Service include all the current vars and global config
-var config *cfg.Config
-var framework *mesosutil.FrameworkConfig
+type MExecutor cfg.Executor
 
 // Marshaler to serialize Protobuf Message to JSON
 var marshaller = jsonpb.Marshaler{
@@ -27,14 +26,23 @@ var marshaller = jsonpb.Marshaler{
 	OrigName:    true,
 }
 
+var config *cfg.Config
+var framework *mesosutil.FrameworkConfig
+var e *cfg.Executor
+
 // SetConfig set the global config
 func SetConfig(cfg *cfg.Config, frm *mesosutil.FrameworkConfig) {
 	config = cfg
 	framework = frm
 }
 
-// Subscribe to the mesos backend
-func Subscribe() error {
+// NewExecutor initializes a new executor with the given executor and framework ID
+func Executor() error {
+	protocol := "https"
+	if !framework.MesosSSL {
+		protocol = "http"
+	}
+
 	subscribeCall := &executor.Call{
 		Type: executor.Call_SUBSCRIBE,
 		FrameworkID: mesosproto.FrameworkID{
@@ -48,111 +56,113 @@ func Subscribe() error {
 			UnacknowledgedUpdates: []executor.Call_Update{},
 		},
 	}
-	logrus.Debug(subscribeCall)
+
 	body, _ := marshaller.MarshalToString(subscribeCall)
 	logrus.Debug(body)
 	client := &http.Client{}
 	client.Transport = &http.Transport{
 		// #nosec G402
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: config.SkipSSL},
+		ResponseHeaderTimeout: 30 * time.Second,
+		MaxIdleConnsPerHost:   2,
+		TLSClientConfig:       &tls.Config{InsecureSkipVerify: config.SkipSSL},
 	}
 
-	protocol := "https"
-	if !framework.MesosSSL {
-		protocol = "http"
-	}
 	req, _ := http.NewRequest("POST", protocol+"://"+config.MesosAgentHostname+"/api/v1/executor", bytes.NewBuffer([]byte(body)))
 	req.Close = true
 	req.SetBasicAuth(framework.Username, framework.Password)
 	req.Header.Set("Content-Type", "application/json")
-	res, err := client.Do(req)
 
-	if err != nil {
-		logrus.Fatal("Error during subscribe: ", err.Error())
-		return err
+	// Prepare executor
+	e = &cfg.Executor{
+		Cli:           client,
+		Req:           req,
+		ExecutorID:    config.ExecutorID,
+		FrameworkID:   config.FrameworkID,
+		FrameworkInfo: mesosproto.FrameworkInfo{},
 	}
-	defer res.Body.Close()
 
-	reader := bufio.NewReader(res.Body)
-
-	line, _ := reader.ReadString('\n')
-	line = strings.TrimSuffix(line, "\n")
-
-	for {
-		// Read line from Mesos
-		line, _ = reader.ReadString('\n')
-		line = strings.TrimSuffix(line, "\n")
-		var event executor.Event
-		err := jsonpb.UnmarshalString(line, &event)
-		if err != nil {
-			logrus.Error("Error during unmarshal: ", err.Error())
-			return err
-		}
-		logrus.Debug("Subscribe Got: ", event.GetType())
-
-		switch event.Type {
-		case executor.Event_SUBSCRIBED:
-			logrus.Debug(event)
-			logrus.Info("Subscribed")
-			logrus.Info("ExecutorId: ", event.Subscribed.ExecutorInfo.ExecutorID)
-
-		case executor.Event_MESSAGE:
-			logrus.Debug(event)
-			logrus.Info("Message")
-		case executor.Event_LAUNCH_GROUP:
-			logrus.Debug(event)
-			logrus.Info("Launch Group")
-
-		case executor.Event_LAUNCH:
-			logrus.Debug(event)
-			logrus.Info("Launch")
-		case executor.Event_ACKNOWLEDGED:
-			logrus.Debug(event)
-			logrus.Info("Acknowledged")
-		case executor.Event_ERROR:
-			logrus.Debug(event)
-			logrus.Info("Error")
-		case executor.Event_KILL:
-			logrus.Debug(event)
-			logrus.Info("Kill")
-		case executor.Event_SHUTDOWN:
-			logrus.Debug(event)
-			logrus.Info("Shutdown")
-		case executor.Event_UNKNOWN:
-			logrus.Debug(event)
-			logrus.Info("Unknown")
-		case executor.Event_HEARTBEAT:
-			logrus.Debug(event)
-			logrus.Info("Heartbeat")
-
-		default:
-			logrus.Debug("DEFAULT EVENT: ", event.Type)
-		}
-	}
+	return Subscribe()
 }
 
-// Call will send messages to mesos
-func Call(message *executor.Call) {
-	body, _ := marshaller.MarshalToString(message)
+// Execute runs the executor workflow
+func Subscribe() error {
+	var err error
+	for !e.Shutdown {
+		var res *http.Response
+		res, err = e.Cli.Do(e.Req)
+		if res != nil {
+			defer res.Body.Close()
+		}
+		if err != nil {
+			logrus.Error("Error during connect: ", err.Error())
+			return err
+		}
+		reader := bufio.NewReader(res.Body)
+		line, _ := reader.ReadString('\n')
+		line = strings.TrimSuffix(line, "\n")
 
-	client := &http.Client{}
-	client.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		// We are connected, we start to handle events
+		for !e.Shutdown {
+			line, _ := reader.ReadString('\n')
+			line = strings.TrimSuffix(line, "\n")
+			var event executor.Event
+			err = jsonpb.UnmarshalString(line, &event)
+			if err != nil {
+				logrus.Error("Error during unmarshal: ", err.Error())
+				return err
+			}
+			logrus.Debug("Subscribe Got: ", event.GetType())
+
+			switch event.Type {
+			case executor.Event_SUBSCRIBED:
+				err = handleSubscribed(&event)
+
+			case executor.Event_LAUNCH_GROUP:
+				err = handleLaunchGroup(&event)
+
+			case executor.Event_LAUNCH:
+				err = handleLaunch(&event)
+
+			default:
+				logrus.Debug("DEFAULT EVENT: ", event.Type)
+			}
+		}
 	}
 
-	protocol := "https"
-	if !framework.MesosSSL {
-		protocol = "http"
-	}
-	req, _ := http.NewRequest("POST", protocol+"://"+config.MesosAgentHostname+"/api/v1/executor", bytes.NewBuffer([]byte(body)))
-	req.Close = true
-	req.SetBasicAuth(framework.Username, framework.Password)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := client.Do(req)
+	// Now, executor is shutting down (every tasks have been killed)
+	logrus.Info("All tasks have been killed. Now exiting, bye bye.")
 
-	if err != nil {
-		logrus.Debug("Call Message: ", err)
-	}
+	return err
+}
 
-	defer res.Body.Close()
+// handleSubscribed handles subscribed events
+func handleSubscribed(ev *executor.Event) error {
+	logrus.Info("Handled SUBSCRIBED event")
+	logrus.Debug(ev)
+
+	e.AgentInfo = ev.GetSubscribed().GetAgentInfo()
+	e.ExecutorInfo = ev.GetSubscribed().GetExecutorInfo()
+	e.FrameworkInfo = ev.GetSubscribed().GetFrameworkInfo()
+
+	return nil
+}
+
+// handleLaunchGroup puts given task in unacked tasks and launches it
+func handleLaunchGroup(ev *executor.Event) error {
+	logrus.Info("Handled LAUNCH Group event")
+	logrus.Debug(ev)
+	e.TaskInfo = ev.GetLaunch().GetTask()
+
+	return nil
+}
+
+// handleLaunch puts given task in unacked tasks and launches it
+func handleLaunch(ev *executor.Event) error {
+	logrus.Info("Handled LAUNCH event")
+	logrus.Debug(ev)
+	e.TaskInfo = ev.GetLaunch().GetTask()
+
+	logrus.Debug(e.TaskInfo)
+
+	return nil
 }

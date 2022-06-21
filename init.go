@@ -7,7 +7,7 @@ import (
 	mesosutil "github.com/AVENTER-UG/mesos-util"
 	util "github.com/AVENTER-UG/util"
 
-	cfg "github.com/AVENTER-UG/mesos-mainframe-executor/types"
+	cfg "github.com/AVENTER-UG/mesos-firecracker-executor/types"
 )
 
 var config cfg.Config

@@ -1,26 +1,22 @@
-module github.com/AVENTER-UG/mesos-mainframe-executor
+module github.com/AVENTER-UG/mesos-firecracker-executor
 
-go 1.17
+go 1.16
 
 require (
-	github.com/AVENTER-UG/mesos-m3s v0.2.0
-	github.com/AVENTER-UG/mesos-util v0.0.23
+	github.com/AVENTER-UG/mesos-util v0.0.24
 	github.com/AVENTER-UG/util v0.2.0
-	github.com/go-redis/redis/v8 v8.11.4
 	github.com/gogo/protobuf v1.3.2
+	github.com/mesos/mesos-go v0.0.11
 	github.com/sirupsen/logrus v1.8.1
+	github.com/spf13/viper v1.12.0
 )
 
 require (
 	github.com/AVENTER-UG/go-logrus-formatter v0.0.0-20181204170756-e4bb1d931585 // indirect
-	github.com/cespare/xxhash/v2 v2.1.2 // indirect
-	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/gorilla/mux v1.8.0 // indirect
-	github.com/mattn/go-colorable v0.1.11 // indirect
-	github.com/mattn/go-isatty v0.0.14 // indirect
+	github.com/google/uuid v1.1.2
+	github.com/gorilla/mux v1.8.0
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
+	github.com/onsi/gomega v1.16.0 // indirect
+	github.com/pquerna/ffjson v0.0.0-20190930134022-aa0246cd15f7 // indirect
 	github.com/russross/blackfriday v1.6.0 // indirect
-	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
-	golang.org/x/sys v0.0.0-20210927094055-39ccf1dd6fa6 // indirect
-	golang.org/x/term v0.0.0-20210615171337-6886f2dfbf5b // indirect
 )

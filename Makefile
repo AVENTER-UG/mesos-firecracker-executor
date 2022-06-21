@@ -1,7 +1,7 @@
 #Dockerfile vars
 
 #vars
-TAG=`git describe`
+TAG=dev
 BUILDDATE=`date -u +%Y-%m-%dT%H:%M:%SZ`
 BRANCH=`git symbolic-ref --short HEAD`
 UID=`id -u`
@@ -24,14 +24,10 @@ build:
 	@echo ">>>> Build binary"
 	@CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags "-s -w -X main.BuildVersion=${BUILDDATE} -X main.GitVersion=${TAG} -X main.VersionURL=${VERSION_URL} -extldflags \"-static\"" .
 
-build-almalinux8:
+build-debian:
 	@echo ">>>> Build binary for almalinux8"
-	@docker run --rm -e GOPATH=/tmp -e GOCACHE=/tmp -e CGO_ENABLED=0 -e GOOS=linux -u ${UID}:${GID} -w /data -v ${PWD}:/data avhost/almalinux8_rpmbuild go build -o /data/mesos-mainframe-executor . 
-	@cp mesos-mainframe-executor http/
-
-publish-http:
-	@echo ">>>> Publish via http"
-	@docker run --rm -p 8888:8080 -v ${PWD}/http:/var/www/htdocs -i avhost/docker-lighttpd:v0.1.0
+	@export DOCKER_CONTEXT=default; docker run --rm -e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin -e GOPATH=/tmp -e GOCACHE=/tmp -e CGO_ENABLED=0 -e GOOS=linux -u ${UID}:${GID} -w /data -v ${PWD}:/data avhost/debian_build:11 go build -o /data/mesos-firecracker-executor . 
+	@mv mesos-firecracker-executor http/
 
 docs:
 	@echo ">>>> Build docs"
