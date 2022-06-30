@@ -1,12 +1,15 @@
 {
   "id": "/test",
+  "cmd": "sleep 10000",
   "role": "marathon",
   "cpus": 0.1,
   "mem": 128,
   "disk": 0,
   "gpus": 0,
-  "instances": 0,
-  "acceptedResourceRoles": [],
+  "instances": 1,
+  "acceptedResourceRoles": [
+    "*"
+  ],  
   "executor": "/usr/libexec/mesos/mesos-firecracker-executor",
   "portDefinitions": [
     {
@@ -14,6 +17,5 @@
       "name": "default",
       "protocol": "tcp"
     }
-  ],
-  "maxLaunchDelaySeconds": 300
+  ]
 }
