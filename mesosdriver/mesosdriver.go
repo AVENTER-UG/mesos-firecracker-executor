@@ -81,9 +81,7 @@ func (driver *ExecutorDriver) unacknowledgedUpdates() (result []executor.Call_Up
 }
 
 // eventLoop is the main handler event loop of the driver. Called from Run()
-func (driver *ExecutorDriver) eventLoop(decoder encoding.Decoder,
-	h events.Handler) error {
-
+func (driver *ExecutorDriver) eventLoop(decoder encoding.Decoder, h events.Handler) error {
 	var err error
 
 	log.Info("Entering event loop")
@@ -93,7 +91,6 @@ func (driver *ExecutorDriver) eventLoop(decoder encoding.Decoder,
 
 	go func() {
 		for {
-			var err error
 			var e executor.Event
 			if err = decoder.Decode(&e); err == nil {
 				err = h.HandleEvent(ctx, &e)
@@ -172,7 +169,6 @@ func (driver *ExecutorDriver) buildEventHandler() events.Handler {
 			return errors.New(
 				"received abort from Mesos, will attempt to re-subscribe",
 			)
-
 		},
 
 		executor.Event_HEARTBEAT: func(_ context.Context, e *executor.Event) error {
@@ -339,4 +335,14 @@ func (driver *ExecutorDriver) Run() error {
 
 		<-shouldReconnect // wait for some amount of time before retrying subscription
 	}
+}
+
+// ThrowError will create a error object and send state update to mesos
+func (driver *ExecutorDriver) ThrowError(taskID mesos.TaskID, err error) {
+	message := err.Error()
+	status := driver.NewStatus(taskID)
+	status.State = mesos.TASK_FAILED.Enum()
+	status.Message = &message
+
+	driver.SendStatusUpdate(status)
 }

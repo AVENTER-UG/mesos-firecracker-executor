@@ -18,19 +18,23 @@ var BuildVersion string
 // GitVersion is the revision and commit number
 var GitVersion string
 
+// Settings of the firecracker executor
+var Settings map[string]string
+
 func logConfig() {
 	logrus.Infof("Environment ---------------------------")
 	envVars := os.Environ()
 	sort.Strings(envVars)
+	Settings = make(map[string]string)
 	for _, setting := range envVars {
 
 		if strings.HasPrefix(setting, "MESOS") ||
-			strings.HasPrefix(setting, "EXECUTOR") ||
-			strings.HasPrefix(setting, "VAULT") ||
+			strings.HasPrefix(setting, "FIRECRACKER") ||
 			(setting == "HOME") {
 
 			pair := strings.Split(setting, "=")
 			logrus.Infof(" * %-30s: %s", pair[0], pair[1])
+			Settings[pair[0]] = pair[1]
 		}
 	}
 	logrus.Infof("---------------------------------------")
@@ -38,17 +42,21 @@ func logConfig() {
 
 func main() {
 
-	os.Setenv("MESOS_SANDBOX", "/tmp")
-
 	logConfig()
-
-	nExec := mesos.NewExecutor()
 
 	cfg, err := mesosconfig.FromEnv()
 	if err != nil {
 		log.Fatal("failed to load configuration: " + err.Error())
 	}
 
+	var level logrus.Level
+	level, err = logrus.ParseLevel("DEBUG")
+	if err != nil {
+		return
+	}
+	logrus.SetLevel(level)
+
+	nExec := mesos.NewExecutor(&cfg, Settings)
 	nExec.Driver = mesosdriver.NewExecutorDriver(&cfg, nExec)
 	err = nExec.Driver.Run()
 	if err != nil {

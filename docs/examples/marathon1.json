@@ -1,0 +1,54 @@
+{
+  "id": "/test",
+  "cmd": "sleep 10000",
+  "role": "marathon",
+  "cpus": 0.1,
+  "mem": 128,
+  "disk": 0,
+  "gpus": 0,
+  "instances": 1,
+  "acceptedResourceRoles": [
+    "*"
+  ],
+  "executor": "/mnt/mesos/sandbox/mesos-firecracker-executor",
+  "portDefinitions": [
+    {
+      "port": 10000,
+      "name": "default",
+      "protocol": "tcp"
+    }
+  ],
+  "container": {
+    "docker": {
+      "image": "debian:11",
+      "privileged": true      
+    },
+    "type": "DOCKER"
+  },
+  "networks": [
+    {
+      "mode": "host"
+    }
+  ],  
+  "env": {
+    "PATH": "/mnt/mesos/sandbox:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  },  
+  "fetch": [
+      {
+        "uri": "http://localhost:8888/firecracker",
+        "executable": true
+      },
+      {
+        "uri": "http://localhost:8888/vmlinux",
+        "executable": true
+      },
+      {
+        "uri": "http://localhost:8888/rootfs.ext4",
+        "executable": true
+      },                
+      {
+        "uri": "http://localhost:8888/mesos-firecracker-executor",
+        "executable": true
+      }        
+  ]  
+}

@@ -7,11 +7,12 @@ import (
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
-func getFirecrackerConfig(vmmID string) (firecracker.Config, error) {
+func (e *Firecracker) getFirecrackerConfig(vmmID string) firecracker.Config {
 	socket := "/tmp/" + vmmID + ".socket"
+
 	return firecracker.Config{
 		SocketPath:      socket,
-		KernelImagePath: "/usr/libexec/mesos/vmlinux",
+		KernelImagePath: e.Settings["FIRECRACKER_WORKDIR"] + "/vmlinux",
 		LogPath:         fmt.Sprintf("%s.log", socket),
 		Drives: []models.Drive{{
 			DriveID:      firecracker.String("1"),
@@ -44,5 +45,5 @@ func getFirecrackerConfig(vmmID string) (firecracker.Config, error) {
 			HtEnabled:  firecracker.Bool(true),
 			MemSizeMib: firecracker.Int64(256),
 		},
-	}, nil
+	}
 }
