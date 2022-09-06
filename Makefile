@@ -30,14 +30,23 @@ build-debian:
 	@cp mesos-firecracker-executor http/
 	@mv mesos-firecracker-executor build/
 
+build-ubuntu:
+	@echo ">>>> Build binary for ubuntu focal"
+	@export DOCKER_CONTEXT=default; docker run --rm -e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin -e GOPATH=/tmp -e GOCACHE=/tmp -e CGO_ENABLED=0 -e GOOS=linux -u ${UID}:${GID} -w /data -v ${PWD}:/data avhost/ubuntu_build:focal go build -o /data/mesos-firecracker-executor . 
+	@cp mesos-firecracker-executor http/
+	@mv mesos-firecracker-executor build/
+
+build-docker:
+	@docker buildx build --push -t avhost/firecracker:latest -f Dockerfile .
+
 copy-docker:
 	@echo ">>>> Copy into mesos-mini"
-	docker cp build/mesos-firecracker-executor mesos:/usr/libexec/mesos/mesos-firecracker-executor
-	docker cp build/rootfs.ext4 mesos:/usr/libexec/mesos/rootfs.ext4
-	docker cp build/vmlinux mesos:/usr/libexec/mesos/vmlinux
-	docker cp build/firecracker mesos:/usr/local/bin/firecracker
-	docker cp resources/fcnet.conflist mesos:/etc/cni/conf.d/fcnet.conflist
-	docker cp resources/tc-redirect-tap mesos:/opt/cni/bin/tc-redirect-tap
+	docker cp build/mesos-firecracker-executor avhost_docker-mesos-extension-desktop-extension-service:/usr/libexec/mesos/mesos-firecracker-executor
+	docker cp build/rootfs.ext4 avhost_docker-mesos-extension-desktop-extension-service:/usr/libexec/mesos/rootfs.ext4
+	docker cp build/vmlinux avhost_docker-mesos-extension-desktop-extension-service:/usr/libexec/mesos/vmlinux
+	docker cp build/firecracker avhost_docker-mesos-extension-desktop-extension-service:/usr/local/bin/firecracker
+	docker cp resources/fcnet.conflist avhost_docker-mesos-extension-desktop-extension-service:/etc/cni/conf.d/fcnet.conflist
+	docker cp resources/tc-redirect-tap avhost_docker-mesos-extension-desktop-extension-service:/opt/cni/bin/tc-redirect-tap
 
 docs:
 	@echo ">>>> Build docs"

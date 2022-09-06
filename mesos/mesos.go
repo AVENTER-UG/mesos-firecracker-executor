@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/AVENTER-UG/mesos-firecracker-executor/mesosdriver"
 	util "github.com/AVENTER-UG/util"
@@ -68,6 +69,7 @@ func (e *Firecracker) LaunchTask(taskInfo *mesos.TaskInfo) {
 		e.IP = e.Machine.Cfg.NetworkInterfaces[0].StaticConfiguration.IPConfiguration.IPAddr.IP
 		logrus.WithField("ip", e.IP).Info("machine started")
 		e.updateStatus(mesos.TASK_RUNNING)
+		go e.heartbeatLoop()
 	}
 }
 
@@ -84,8 +86,8 @@ func (e *Firecracker) KillTask(taskID *mesos.TaskID) {
 	e.updateStatus(mesos.TASK_KILLED)
 }
 
-// HealthCheck of the vmm-agent
-func (e *Firecracker) HealthCheck() {
+// Heartbeat of the vmm-agent
+func (e *Firecracker) Heartbeat() {
 	logrus.WithField("func", "HealthCheck").Info("Handle HealtchCheck Event")
 
 	port := e.Settings["FIRECRACKER_AGENT_PORT"]
@@ -114,5 +116,14 @@ func (e *Firecracker) updateStatus(state mesos.TaskState) {
 	err := e.Driver.SendStatusUpdate(status)
 	if err != nil {
 		e.Driver.ThrowError(e.Task.TaskID, fmt.Errorf("error while updating task status"))
+	}
+}
+
+// HeartbeatLoop is the main loop for the hearbeat
+func (e *Firecracker) heartbeatLoop() {
+	ticker := time.NewTicker(time.Second * 1)
+	defer ticker.Stop()
+	for ; true; <-ticker.C {
+		e.Heartbeat()
 	}
 }

@@ -31,6 +31,7 @@ const (
 type TaskDelegate interface {
 	LaunchTask(taskInfo *mesos.TaskInfo)
 	KillTask(taskID *mesos.TaskID)
+	Heartbeat()
 }
 
 // The ExecutorDriver does all the work of interacting with Mesos and the Agent
@@ -176,6 +177,7 @@ func (driver *ExecutorDriver) buildEventHandler() events.Handler {
 			// and force reconnect if we don't get one. But we already watch the
 			// connection so it's just redundant. Ignore.
 			log.Debug("Heartbeat received")
+			driver.delegate.Heartbeat()
 			return nil
 		},
 	}.Otherwise(func(_ context.Context, e *executor.Event) error {
