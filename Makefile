@@ -2,54 +2,59 @@
 
 #vars
 TAG=dev
-BUILDDATE=`date -u +%Y-%m-%dT%H:%M:%SZ`
-BRANCH=`git symbolic-ref --short HEAD`
 UID=`id -u`
 GID=`id -g`
+TAG=${shell git describe}
+BUILDDATE=${shell date -u +%Y-%m-%dT%H:%M:%SZ}
+IMAGEFULLNAME=avhost/${IMAGENAME}
+BRANCH=`git symbolic-ref --short HEAD`
+LASTCOMMIT=$(shell git log -1 --pretty=short | tail -n 1 | tr -d " " | tr -d "UPDATE:")
 
 .PHONY: help build all docs 
 
-help:
-	    @echo "Makefile arguments:"
-	    @echo ""
-	    @echo "Makefile commands:"
-			@echo "push"
-	    @echo "build"
-	    @echo "all"
-			@echo "docs"
-
 .DEFAULT_GOAL := all
+
+ifeq (${BRANCH}, master) 
+        BRANCH=latest
+endif
+
+ifneq ($(shell echo $(LASTCOMMIT) | grep -E '^v([0-9]+\.){0,2}(\*|[0-9]+)'),)
+        BRANCH=${LASTCOMMIT}
+else
+        BRANCH=latest
+endif
 
 build:
 	@echo ">>>> Build binary"
-	@CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags "-s -w -X main.BuildVersion=${BUILDDATE} -X main.GitVersion=${TAG} -X main.VersionURL=${VERSION_URL} -extldflags \"-static\"" .
+	@CGO_ENABLED=0 GOOS=linux go build  -ldflags "-s -w -X main.BuildVersion=${BUILDDATE} -X main.GitVersion=${TAG}  -extldflags \"-static\"" -o build/mesos-firecracker-executor .
 
-build-debian:
-	@echo ">>>> Build binary for debian 11"
-	@export DOCKER_CONTEXT=default; docker run --rm -e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin -e GOPATH=/tmp -e GOCACHE=/tmp -e CGO_ENABLED=0 -e GOOS=linux -u ${UID}:${GID} -w /data -v ${PWD}:/data avhost/debian_build:11 go build -o /data/mesos-firecracker-executor . 
-	@cp mesos-firecracker-executor http/
-	@mv mesos-firecracker-executor build/
+build-docker: build
+	@echo ">>>> Build docker image branch: latest"
+	@docker build -t avhost/mesos-firecracker-executor:latest -f Dockerfile .
+	@docker push avhost/mesos-firecracker-executor:latest
 
-build-ubuntu:
-	@echo ">>>> Build binary for ubuntu focal"
-	@export DOCKER_CONTEXT=default; docker run --rm -e PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/go/bin -e GOPATH=/tmp -e GOCACHE=/tmp -e CGO_ENABLED=0 -e GOOS=linux -u ${UID}:${GID} -w /data -v ${PWD}:/data avhost/ubuntu_build:focal go build -o /data/mesos-firecracker-executor . 
-	@cp mesos-firecracker-executor http/
-	@mv mesos-firecracker-executor build/
+submodule-update:
+	@git pull --recurse-submodules
+	@git submodule update --recursive --remote
 
-build-docker:
-	@docker buildx build --push -t avhost/firecracker:latest -f Dockerfile .
+build-vmm: 
+	@cd resources/vmm-agent/; ${MAKE}
+	@cp resources/vmm-agent/build/* build/
 
-copy-docker:
-	@echo ">>>> Copy into mesos-mini"
-	docker cp build/mesos-firecracker-executor avhost_docker-mesos-extension-desktop-extension-service:/usr/libexec/mesos/mesos-firecracker-executor
-	docker cp build/rootfs.ext4 avhost_docker-mesos-extension-desktop-extension-service:/usr/libexec/mesos/rootfs.ext4
-	docker cp build/vmlinux avhost_docker-mesos-extension-desktop-extension-service:/usr/libexec/mesos/vmlinux
-	docker cp build/firecracker avhost_docker-mesos-extension-desktop-extension-service:/usr/local/bin/firecracker
-	docker cp resources/fcnet.conflist avhost_docker-mesos-extension-desktop-extension-service:/etc/cni/conf.d/fcnet.conflist
-	docker cp resources/tc-redirect-tap avhost_docker-mesos-extension-desktop-extension-service:/opt/cni/bin/tc-redirect-tap
+seccheck:
+	grype --add-cpes-if-none .
 
-docs:
-	@echo ">>>> Build docs"
-	$(MAKE) -C $@
+sboom:
+	syft dir:. > sbom.txt
+	syft dir:. -o json > sbom.json
 
-all: build
+go-fmt:
+	@gofmt -w .
+
+push:
+	@echo ">>>> Publish docker image: " ${BRANCH}
+	@docker buildx build --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:${BRANCH} .
+
+check: go-fmt sboom seccheck
+all: submodule-update check build-vmm build-docker 
+vmm: build-vmm build-docker

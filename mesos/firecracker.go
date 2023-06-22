@@ -1,8 +1,6 @@
 package mesos
 
 import (
-	"fmt"
-
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
@@ -13,7 +11,8 @@ func (e *Firecracker) getFirecrackerConfig(vmmID string) firecracker.Config {
 	return firecracker.Config{
 		SocketPath:      socket,
 		KernelImagePath: e.Settings["FIRECRACKER_WORKDIR"] + "/vmlinux",
-		LogPath:         fmt.Sprintf("%s.log", socket),
+		LogLevel:        "DEBUG",
+		LogPath:         "/dev/stdout",
 		Drives: []models.Drive{{
 			DriveID:      firecracker.String("1"),
 			PathOnHost:   firecracker.String("/tmp/" + vmmID + "-rootfs.ext4"),
@@ -42,7 +41,6 @@ func (e *Firecracker) getFirecrackerConfig(vmmID string) firecracker.Config {
 		}},
 		MachineCfg: models.MachineConfiguration{
 			VcpuCount:  firecracker.Int64(1),
-			HtEnabled:  firecracker.Bool(true),
 			MemSizeMib: firecracker.Int64(256),
 		},
 	}

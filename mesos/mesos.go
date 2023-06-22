@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/AVENTER-UG/mesos-firecracker-executor/mesosdriver"
@@ -26,6 +28,7 @@ type Firecracker struct {
 	Settings    map[string]string
 	Started     bool
 	Task        *mesos.TaskInfo
+	Kill        bool
 }
 
 // NewExecutor returns a properly configured sidecarExecutor.
@@ -37,15 +40,21 @@ func NewExecutor(mesosConfig *config.Config, settings map[string]string) *Firecr
 		ID:          id,
 		MesosConfig: mesosConfig,
 		Settings:    settings,
+		Kill:        false,
 	}
 }
 
 // handleLaunch puts given task in unacked tasks and launches it
 func (e *Firecracker) LaunchTask(taskInfo *mesos.TaskInfo) {
-	logrus.WithField("func", "LaunchTask").Info("Handle Launch Event")
-	logrus.WithField("func", "LaunchTask").Debug("", taskInfo)
+
+	commands := strings.Join(os.Args[1:], " ")
+
+	logrus.WithField("func", "mesos.LaunchTask").Info("Handle Launch Event")
 
 	e.Task = taskInfo
+
+	logrus.WithField("func", "LaunchTask").Trace("commands: ", commands)
+	logrus.WithField("func", "LaunchTask").Trace("TaskInfo: ", e.Task)
 
 	util.Copy(e.Settings["FIRECRACKER_WORKDIR"]+"/rootfs.ext4", "/tmp/"+e.ID+"-rootfs.ext4")
 
@@ -55,19 +64,19 @@ func (e *Firecracker) LaunchTask(taskInfo *mesos.TaskInfo) {
 	// Create Machine
 	e.Machine, err = firecracker.NewMachine(e.Ctx, fcConfig)
 	if err != nil {
-		logrus.WithField("func", "LaunchTask").Error("Could not create Firecracker machine: ", err.Error())
+		logrus.WithField("func", "mesos.LaunchTask").Error("Could not create Firecracker machine: ", err.Error())
 	}
 
 	// Start Machine
 	err = e.Machine.Start(e.Ctx)
 	if err != nil {
-		logrus.WithField("func", "LaunchTask").Error("Could not start Firecracker machine: ", err.Error())
+		logrus.WithField("func", "mesos.LaunchTask").Error("Could not start Firecracker machine: ", err.Error())
 	}
 
 	if len(e.Machine.Cfg.NetworkInterfaces) > 0 {
 		e.Started = true
 		e.IP = e.Machine.Cfg.NetworkInterfaces[0].StaticConfiguration.IPConfiguration.IPAddr.IP
-		logrus.WithField("ip", e.IP).Info("machine started")
+		logrus.WithField("func", "mesos.LaunchTask").Info("machine started with IP: ", e.IP)
 		e.updateStatus(mesos.TASK_RUNNING)
 		go e.heartbeatLoop()
 	}
@@ -75,38 +84,46 @@ func (e *Firecracker) LaunchTask(taskInfo *mesos.TaskInfo) {
 
 // KillTask is a Mesos callback that will try very hard to kill off a running
 // task/container.
-func (e *Firecracker) KillTask(taskID *mesos.TaskID) {
-	logrus.WithField("func", "KillTask").Info("Handle KillTask Event")
-	logrus.WithField("func", "KillTask").Debug("", taskID)
+func (e *Firecracker) KillTask() {
+	logrus.WithField("func", "mesos.KillTask").Info("Handle KillTask Event")
+	logrus.WithField("func", "mesos.KillTask").Debug("", e.Task.TaskID)
 
 	err := e.Machine.StopVMM()
 	if err != nil {
-		logrus.WithField("func", "KillTask").Error("Could not kill Firecracker machine: ", err.Error())
+		logrus.WithField("func", "mesos.KillTask").Error("Could not kill Firecracker machine: ", err.Error())
 	}
 	e.updateStatus(mesos.TASK_KILLED)
+	e.Kill = true
 }
 
 // Heartbeat of the vmm-agent
 func (e *Firecracker) Heartbeat() {
-	logrus.WithField("func", "HealthCheck").Info("Handle HealtchCheck Event")
+	select {
+	case <-time.After(10 * time.Second):
 
-	port := e.Settings["FIRECRACKER_AGENT_PORT"]
-	client := &http.Client{}
-	req, _ := http.NewRequest("GET", "http://"+e.IP.String()+":"+port+"/health", nil)
-	req.Close = true
-	res, err := client.Do(req)
+		port := e.Settings["FIRECRACKER_AGENT_PORT"]
+		client := &http.Client{}
+		req, _ := http.NewRequest("GET", "http://"+e.IP.String()+":"+port+"/health", nil)
+		req.Close = true
+		res, err := client.Do(req)
 
-	if err != nil {
-		logrus.WithField("func", "HealtchCheck").Error("", err.Error())
-		return
-	}
+		if err != nil {
+			logrus.WithField("func", "mesos.HealthCheck").Error("Connection Error. ", err.Error())
+			if e.Kill {
+				logrus.WithField("func", "mesos.HealthCheck").Info("Exit")
+				e.Driver.Stop()
+			}
+			return
+		}
 
-	defer res.Body.Close()
+		defer res.Body.Close()
 
-	if res.StatusCode != 200 {
-		logrus.WithField("func", "HealtchCheck").Error("HTTP Return not 200: ", err.Error())
-		e.updateStatus(mesos.TASK_FAILED)
-		return
+		if res.StatusCode != 200 {
+			logrus.WithField("func", "mesos.HealthCheck").Error("HTTP Return not 200. Set TASK_FAILED: ", err.Error())
+			e.updateStatus(mesos.TASK_FAILED)
+			e.KillTask()
+			return
+		}
 	}
 }
 

@@ -11,3 +11,4 @@ mesos_cli/m3s/__pycache__
 mesos-firecracker-executor
 http/**
 build/**
+mesos-firecracker-executor.code-workspace

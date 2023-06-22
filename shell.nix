@@ -1,10 +1,18 @@
-{ pkgs ? import <nixpkgs> { } }:
+with import <nixpkgs> {};
 
-with pkgs;
+stdenv.mkDerivation {
+name = "firecracker";
 
-mkShell {
-  buildInputs = [
-    go
-    docker
-  ];
+buildInputs = [
+  go
+  docker
+  openssh
+  lighttpd    
+];
+
+shellHook = ''
+  cp docs/nixshell/lighttpd.conf /tmp/
+  lighttpd -f /tmp/lighttpd.conf 
+  '';
 }
+

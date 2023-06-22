@@ -2,12 +2,15 @@ package mesosdriver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/AVENTER-UG/util"
 	mesos "github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/backoff"
 	"github.com/mesos/mesos-go/api/v1/lib/encoding"
@@ -19,7 +22,7 @@ import (
 	"github.com/mesos/mesos-go/api/v1/lib/httpcli"
 	"github.com/mesos/mesos-go/api/v1/lib/httpcli/httpexec"
 	"github.com/pborman/uuid"
-	log "github.com/sirupsen/logrus"
+	logrus "github.com/sirupsen/logrus"
 )
 
 const (
@@ -30,7 +33,7 @@ const (
 // A TaskDelegate is responsible for launching and killing tasks
 type TaskDelegate interface {
 	LaunchTask(taskInfo *mesos.TaskInfo)
-	KillTask(taskID *mesos.TaskID)
+	KillTask()
 	Heartbeat()
 }
 
@@ -85,7 +88,7 @@ func (driver *ExecutorDriver) unacknowledgedUpdates() (result []executor.Call_Up
 func (driver *ExecutorDriver) eventLoop(decoder encoding.Decoder, h events.Handler) error {
 	var err error
 
-	log.Info("Entering event loop")
+	logrus.WithField("func", "mesosdriver.eventLoop").Info("Entering event loop")
 	ctx := context.Background()
 
 	event := make(chan error)
@@ -95,6 +98,8 @@ func (driver *ExecutorDriver) eventLoop(decoder encoding.Decoder, h events.Handl
 			var e executor.Event
 			if err = decoder.Decode(&e); err == nil {
 				err = h.HandleEvent(ctx, &e)
+			} else {
+				logrus.WithField("func", "mesosdriver.eventLoop").Debug("Event loop error: ", err.Error())
 			}
 
 			select {
@@ -109,7 +114,7 @@ OUTER:
 	for {
 		select {
 		case <-driver.quitChan:
-			log.Info("Event loop canceled")
+			logrus.WithField("func", "mesosdriver.eventLoop").Info("Event loop canceled")
 			return nil
 		case err = <-event:
 			if err != nil {
@@ -118,7 +123,7 @@ OUTER:
 		}
 	}
 
-	log.Info("Exiting event loop")
+	logrus.Info("Exiting event loop")
 
 	return err
 }
@@ -128,7 +133,7 @@ OUTER:
 func (driver *ExecutorDriver) buildEventHandler() events.Handler {
 	return events.HandlerFuncs{
 		executor.Event_SUBSCRIBED: func(_ context.Context, e *executor.Event) error {
-			log.Info("Executor subscribed to events")
+			logrus.Info("Executor subscribed to events")
 			driver.framework = e.Subscribed.FrameworkInfo
 			driver.executor = e.Subscribed.ExecutorInfo
 			driver.agent = e.Subscribed.AgentInfo
@@ -142,31 +147,31 @@ func (driver *ExecutorDriver) buildEventHandler() events.Handler {
 		},
 
 		executor.Event_KILL: func(_ context.Context, e *executor.Event) error {
-			log.Infof("Received kill from Mesos for %s", e.Kill.TaskID.Value)
-			driver.delegate.KillTask(&e.Kill.TaskID)
+			logrus.Infof("Received kill from Mesos for %s", e.Kill.TaskID.Value)
+			driver.delegate.KillTask()
 			return nil
 		},
 
 		executor.Event_ACKNOWLEDGED: func(_ context.Context, e *executor.Event) error {
-			log.Infof("Acknowledged: %s", e.Acknowledged.TaskID.Value)
+			logrus.WithField("func", "mesosdriver.buildEventHandler").Infof("Acknowledged: %s", e.Acknowledged.TaskID.Value)
 			delete(driver.unackedTasks, e.Acknowledged.TaskID)
 			delete(driver.unackedUpdates, string(e.Acknowledged.UUID))
 			return nil
 		},
 
 		executor.Event_MESSAGE: func(_ context.Context, e *executor.Event) error {
-			log.Debugf("MESSAGE: received %d bytes of message data", len(e.Message.Data))
+			logrus.WithField("func", "mesosdriver.buildEventHandler").Debugf("MESSAGE: received %d bytes of message data", len(e.Message.Data))
 			return nil
 		},
 
 		executor.Event_SHUTDOWN: func(_ context.Context, e *executor.Event) error {
-			log.Info("Shutting down the executor")
+			logrus.WithField("func", "mesosdriver.buildEventHandler").Info("Shutting down the executor")
 			driver.Stop()
 			return nil
 		},
 
 		executor.Event_ERROR: func(_ context.Context, e *executor.Event) error {
-			log.Error("ERROR received")
+			logrus.WithField("func", "mesosdriver.buildEventHandler").Error("ERROR received")
 			return errors.New(
 				"received abort from Mesos, will attempt to re-subscribe",
 			)
@@ -176,12 +181,12 @@ func (driver *ExecutorDriver) buildEventHandler() events.Handler {
 			// We don't process heartbeats. In theory we ought to count how many we get
 			// and force reconnect if we don't get one. But we already watch the
 			// connection so it's just redundant. Ignore.
-			log.Debug("Heartbeat received")
+			logrus.WithField("func", "mesosdriver.buildEventHandler").Debug("Heartbeat received")
 			driver.delegate.Heartbeat()
 			return nil
 		},
 	}.Otherwise(func(_ context.Context, e *executor.Event) error {
-		log.Error("unexpected event", e)
+		logrus.WithField("func", "mesosdriver.buildEventHandler").Error("unexpected event", e)
 		return nil
 	})
 }
@@ -194,7 +199,7 @@ func (driver *ExecutorDriver) SendStatusUpdate(status mesos.TaskStatus) error {
 		resp.Close()
 	}
 	if err != nil {
-		log.Errorf("failed to send update: %+v", err)
+		logrus.WithField("func", "mesosdriver.SendStatusUpdate").Errorf("failed to send update: %+v", err)
 		logDebugJSON(upd)
 	} else {
 		driver.unackedUpdates[string(status.UUID)] = *upd.Update
@@ -213,7 +218,7 @@ type marshalJSON interface {
 func logDebugJSON(mk marshalJSON) {
 	b, err := mk.MarshalJSON()
 	if err == nil {
-		log.Debug(string(b))
+		logrus.WithField("func", "mesosdriver.logDebugJSON").Trace(string(b))
 	}
 }
 
@@ -233,16 +238,27 @@ func (driver *ExecutorDriver) Stop() {
 
 // NewExecutorDriver returns a properly configured ExecutorDriver
 func NewExecutorDriver(mesosConfig *config.Config, delegate TaskDelegate) *ExecutorDriver {
+	scheme := "http"
+	if util.Getenv("LIBPROCESS_SSL_ENABLED", "false") == "true" {
+		scheme = "https"
+	}
+
 	agentApiUrl := url.URL{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   mesosConfig.AgentEndpoint,
 		Path:   agentAPIPath,
+	}
+
+	httpConfig := []httpcli.ConfigOpt{
+		httpcli.Transport(func(t *http.Transport) {
+			t.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+		}),
 	}
 
 	http := httpcli.New(
 		httpcli.Endpoint(agentApiUrl.String()),
 		httpcli.Codec(codecs.ByMediaType[codecs.MediaTypeProtobuf]),
-		httpcli.Do(httpcli.With(httpcli.Timeout(driverHttpTimeout))),
+		httpcli.Do(httpcli.With(httpConfig[0])),
 	)
 
 	callOptions := executor.CallOptions{
@@ -286,7 +302,7 @@ func (driver *ExecutorDriver) Run() error {
 				driver.unacknowledgedUpdates(),
 			)
 
-			log.Info("Subscribing to agent for events")
+			logrus.WithField("func", "mesosdriver.Run").Info("Subscribing to agent for events")
 
 			resp, err := driver.subscriber.Send(
 				context.TODO(),
@@ -298,7 +314,7 @@ func (driver *ExecutorDriver) Run() error {
 			}
 
 			if err != nil && err != io.EOF {
-				log.Error(err.Error())
+				logrus.WithField("func", "mesosdriver.Run").Error(err.Error())
 				return
 			}
 
@@ -307,22 +323,22 @@ func (driver *ExecutorDriver) Run() error {
 			disconnectTime = time.Now()
 
 			if err != nil && err != io.EOF {
-				log.Error(err.Error())
+				logrus.WithField("func", "mesosdriver.Run").Error(err.Error())
 				return
 			}
 
-			log.Info("Disconnected from Agent")
+			logrus.WithField("func", "mesosdriver.Run").Info("Disconnected from Agent")
 		}()
 
 		select {
 		case <-driver.quitChan:
-			log.Info("Shutting down gracefully because we were told to")
+			logrus.WithField("func", "mesosdriver.Run").Info("Shutting down gracefully because we were told to")
 			return nil
 		default:
 		}
 
 		if !driver.cfg.Checkpoint {
-			log.Info("Exiting gracefully because framework checkpointing is NOT enabled")
+			logrus.WithField("func", "mesosdriver.Run").Info("Exiting gracefully because framework checkpointing is NOT enabled")
 			return nil
 		}
 
@@ -333,7 +349,7 @@ func (driver *ExecutorDriver) Run() error {
 			)
 		}
 
-		log.Info("Waiting for reconnect timeout")
+		logrus.WithField("func", "mesosdriver.Run").Info("Waiting for reconnect timeout")
 
 		<-shouldReconnect // wait for some amount of time before retrying subscription
 	}

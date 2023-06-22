@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"sort"
 	"strings"
@@ -46,11 +45,11 @@ func main() {
 
 	cfg, err := mesosconfig.FromEnv()
 	if err != nil {
-		log.Fatal("failed to load configuration: " + err.Error())
+		logrus.WithField("func", "main").Fatal("failed to load configuration: " + err.Error())
 	}
 
 	var level logrus.Level
-	level, err = logrus.ParseLevel("DEBUG")
+	level, err = logrus.ParseLevel("TRACE")
 	if err != nil {
 		return
 	}
@@ -60,10 +59,10 @@ func main() {
 	nExec.Driver = mesosdriver.NewExecutorDriver(&cfg, nExec)
 	err = nExec.Driver.Run()
 	if err != nil {
-		logrus.Errorf("Immediate Exit: Error from executor driver: %s", err)
+		logrus.WithField("func", "main").Errorf("Immediate Exit: Error from executor driver: %s", err)
 		return
 	}
 
-	logrus.Info("Sidecar Executor exiting")
+	logrus.WithField("func", "main").Info("Sidecar Executor exiting")
 
 }

@@ -1,0 +1,3 @@
+[submodule "resources/vmm-agent"]
+	path = resources/vmm-agent
+	url = https://github.com/AVENTER-UG/vmm-agent
