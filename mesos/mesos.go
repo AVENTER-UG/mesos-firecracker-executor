@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ type Firecracker struct {
 	Started     bool
 	Task        *mesos.TaskInfo
 	Kill        bool
+	Payload     bool
 }
 
 // NewExecutor returns a properly configured sidecarExecutor.
@@ -41,6 +43,7 @@ func NewExecutor(mesosConfig *config.Config, settings map[string]string) *Firecr
 		MesosConfig: mesosConfig,
 		Settings:    settings,
 		Kill:        false,
+		Payload:     false,
 	}
 }
 
@@ -77,6 +80,7 @@ func (e *Firecracker) LaunchTask(taskInfo *mesos.TaskInfo) {
 		e.Started = true
 		e.IP = e.Machine.Cfg.NetworkInterfaces[0].StaticConfiguration.IPConfiguration.IPAddr.IP
 		logrus.WithField("func", "mesos.LaunchTask").Info("machine started with IP: ", e.IP)
+		os.Setenv("FIRECRACKER_VM_IP", e.IP.String())
 		e.updateStatus(mesos.TASK_RUNNING)
 		go e.heartbeatLoop()
 	}
@@ -123,6 +127,22 @@ func (e *Firecracker) Heartbeat() {
 			e.updateStatus(mesos.TASK_FAILED)
 			e.KillTask()
 			return
+		}
+
+		if res.StatusCode == 200 && e.Payload && util.Getenv("FIRECRACKER_PAYLOAD_FILE", "") != "" {
+			logrus.WithField("func", "mesos.HealthCheck").Info("Execute Payload")
+			cmd := exec.Command(util.Getenv("FIRECRACKER_PAYLOAD_FILE", ""))
+
+			logrus.WithField("func", "mesos.HealthCheck").Trace("Payload Command stderr: ", cmd.Stderr)
+
+			err := cmd.Run()
+
+			if err != nil {
+				logrus.WithField("func", "mesos.HealthCheck").Error("Payload error: ", cmd.Stderr)
+				logrus.WithField("func", "mesos.HealthCheck").Error("Payload error: ", err.Error())
+			}
+
+			e.Payload = true
 		}
 	}
 }

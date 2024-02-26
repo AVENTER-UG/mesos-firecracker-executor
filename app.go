@@ -7,6 +7,7 @@ import (
 
 	"github.com/AVENTER-UG/mesos-firecracker-executor/mesos"
 	"github.com/AVENTER-UG/mesos-firecracker-executor/mesosdriver"
+	"github.com/AVENTER-UG/util"
 	mesosconfig "github.com/mesos/mesos-go/api/v1/lib/executor/config"
 	"github.com/sirupsen/logrus"
 )
@@ -21,7 +22,7 @@ var GitVersion string
 var Settings map[string]string
 
 func logConfig() {
-	logrus.Infof("Environment ---------------------------")
+	logrus.WithField("func", "main.logConfig").Info("Environment ---------------------------")
 	envVars := os.Environ()
 	sort.Strings(envVars)
 	Settings = make(map[string]string)
@@ -36,12 +37,20 @@ func logConfig() {
 			Settings[pair[0]] = pair[1]
 		}
 	}
-	logrus.Infof("---------------------------------------")
+	logrus.WithField("func", "main.logConfig").Info("---------------------------------------")
 }
 
 func main() {
 
+	logrus.WithField("func", "main").Println("mesos-firecracker-executor build " + BuildVersion + " git " + GitVersion)
+
 	logConfig()
+
+	Settings["FIRECRACKER_VCPU"] = util.Getenv("FIRECRACKER_VCPU", "1")
+	Settings["FIRECRACKER_MEM_MB"] = util.Getenv("FIRECRACKER_MEM_MB", "256")
+	Settings["FIRECRACKER_AGENT_PORT"] = util.Getenv("FIRECRACKER_AGENT_PORT", "8085")
+	Settings["FIRECRACKER_WORKDIR"] = util.Getenv("FIRECRACKER_WORKDIR", "/mnt/mesos/sandbox")
+	Settings["FIRECRACKER_PAYLOAD_FILE"] = util.Getenv("FIRECRACKER_PAYLOAD_FILE", "8085")
 
 	cfg, err := mesosconfig.FromEnv()
 	if err != nil {

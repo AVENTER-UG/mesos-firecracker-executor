@@ -1,12 +1,17 @@
 package mesos
 
 import (
+	"strconv"
+
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
 func (e *Firecracker) getFirecrackerConfig(vmmID string) firecracker.Config {
 	socket := "/tmp/" + vmmID + ".socket"
+
+	vcpu, _ := strconv.Atoi(e.Settings["FIRECRACKER_VCPU"])
+	mem, _ := strconv.Atoi(e.Settings["FIRECRACKER_MEM_MB"])
 
 	return firecracker.Config{
 		SocketPath:      socket,
@@ -40,8 +45,8 @@ func (e *Firecracker) getFirecrackerConfig(vmmID string) firecracker.Config {
 			},
 		}},
 		MachineCfg: models.MachineConfiguration{
-			VcpuCount:  firecracker.Int64(1),
-			MemSizeMib: firecracker.Int64(256),
+			VcpuCount:  firecracker.Int64(int64(vcpu)),
+			MemSizeMib: firecracker.Int64(int64(mem)),
 		},
 	}
 }

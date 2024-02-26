@@ -6,6 +6,7 @@ UID=`id -u`
 GID=`id -g`
 TAG=${shell git describe}
 BUILDDATE=${shell date -u +%Y-%m-%dT%H:%M:%SZ}
+IMAGENAME=mesos-firecracker-executor
 IMAGEFULLNAME=avhost/${IMAGENAME}
 BRANCH=`git symbolic-ref --short HEAD`
 LASTCOMMIT=$(shell git log -1 --pretty=short | tail -n 1 | tr -d " " | tr -d "UPDATE:")
@@ -24,14 +25,13 @@ else
         BRANCH=latest
 endif
 
-build:
+build-bin:
 	@echo ">>>> Build binary"
 	@CGO_ENABLED=0 GOOS=linux go build  -ldflags "-s -w -X main.BuildVersion=${BUILDDATE} -X main.GitVersion=${TAG}  -extldflags \"-static\"" -o build/mesos-firecracker-executor .
 
-build-docker: build
+build: build-bin
 	@echo ">>>> Build docker image branch: latest"
 	@docker build -t avhost/mesos-firecracker-executor:latest -f Dockerfile .
-	@docker push avhost/mesos-firecracker-executor:latest
 
 submodule-update:
 	@git pull --recurse-submodules
@@ -39,7 +39,7 @@ submodule-update:
 
 build-vmm: 
 	@cd resources/vmm-agent/; ${MAKE}
-	@cp resources/vmm-agent/build/* build/
+	@cp resources/vmm-agent/build/vmm-agent build/
 
 seccheck:
 	grype --add-cpes-if-none .
@@ -51,10 +51,14 @@ sboom:
 go-fmt:
 	@gofmt -w .
 
+update-gomod:
+	go get -u
+
 push:
 	@echo ">>>> Publish docker image: " ${BRANCH}
+	@docker buildx build --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:latest .
 	@docker buildx build --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:${BRANCH} .
 
 check: go-fmt sboom seccheck
-all: submodule-update check build-vmm build-docker 
+all: submodule-update check build-vmm build
 vmm: build-vmm build-docker
