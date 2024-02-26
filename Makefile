@@ -62,4 +62,4 @@ push:
 
 check: go-fmt sboom seccheck
 all: submodule-update check build-vmm build
-vmm: build-vmm build-docker
+vmm: build-vmm 
