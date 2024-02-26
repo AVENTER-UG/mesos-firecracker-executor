@@ -7,7 +7,7 @@ import (
 
 	"github.com/AVENTER-UG/mesos-firecracker-executor/mesos"
 	"github.com/AVENTER-UG/mesos-firecracker-executor/mesosdriver"
-	"github.com/AVENTER-UG/util"
+	"github.com/AVENTER-UG/util/util"
 	mesosconfig "github.com/mesos/mesos-go/api/v1/lib/executor/config"
 	"github.com/sirupsen/logrus"
 )

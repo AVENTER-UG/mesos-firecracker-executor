@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/AVENTER-UG/util"
+	"github.com/AVENTER-UG/util/util"
 	mesos "github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/backoff"
 	"github.com/mesos/mesos-go/api/v1/lib/encoding"

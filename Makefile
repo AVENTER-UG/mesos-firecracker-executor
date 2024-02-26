@@ -40,6 +40,7 @@ submodule-update:
 build-vmm: 
 	@cd resources/vmm-agent/; ${MAKE}
 	@cp resources/vmm-agent/build/vmm-agent build/
+	@cp resources/vmm-agent/build/vmlinux build/
 
 seccheck:
 	grype --add-cpes-if-none .

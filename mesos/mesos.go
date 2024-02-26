@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/AVENTER-UG/mesos-firecracker-executor/mesosdriver"
-	util "github.com/AVENTER-UG/util"
+	util "github.com/AVENTER-UG/util/util"
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	mesos "github.com/mesos/mesos-go/api/v1/lib"
 	"github.com/mesos/mesos-go/api/v1/lib/executor/config"

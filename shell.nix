@@ -8,6 +8,8 @@ buildInputs = [
   docker
   openssh
   lighttpd    
+  syft
+  grype
 ];
 
 shellHook = ''
