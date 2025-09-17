@@ -1,6 +1,6 @@
 # Changelog
 
-## master
+## v0.1.0
 
 - First commit
 - ADD: start microvm and update mesos task state

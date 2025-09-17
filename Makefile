@@ -1,29 +1,20 @@
 #Dockerfile vars
 
 #vars
-TAG=dev
+TAG=v0.1.0
 UID=`id -u`
 GID=`id -g`
-TAG=${shell git describe}
 BUILDDATE=${shell date -u +%Y-%m-%dT%H:%M:%SZ}
 IMAGENAME=mesos-firecracker-executor
 IMAGEFULLNAME=avhost/${IMAGENAME}
-BRANCH=`git symbolic-ref --short HEAD`
+BRANCH=${TAG}
+BRANCHSHORT=$(shell echo ${BRANCH} | awk -F. '{ print $$1"."$$2 }')
 LASTCOMMIT=$(shell git log -1 --pretty=short | tail -n 1 | tr -d " " | tr -d "UPDATE:")
 
 .PHONY: help build all docs 
 
 .DEFAULT_GOAL := all
 
-ifeq (${BRANCH}, master) 
-        BRANCH=latest
-endif
-
-ifneq ($(shell echo $(LASTCOMMIT) | grep -E '^v([0-9]+\.){0,2}(\*|[0-9]+)'),)
-        BRANCH=${LASTCOMMIT}
-else
-        BRANCH=latest
-endif
 
 build-bin:
 	@echo ">>>> Build binary"
@@ -31,7 +22,7 @@ build-bin:
 
 build: build-bin
 	@echo ">>>> Build docker image branch: latest"
-	@docker build -t avhost/mesos-firecracker-executor:latest -f Dockerfile .
+	@docker build -t ${IMAGEFULLNAME}:latest -f Dockerfile .
 
 submodule-update:
 	@git pull --recurse-submodules
@@ -42,6 +33,11 @@ build-vmm:
 	@cp resources/vmm-agent/build/vmm-agent build/
 	@cp resources/vmm-agent/build/vmlinux build/
 
+
+update-gomod:
+	go get -u
+	go mod tidy
+
 seccheck:
 	grype --add-cpes-if-none .
 
@@ -49,17 +45,21 @@ sboom:
 	syft dir:. > sbom.txt
 	syft dir:. -o json > sbom.json
 
+imagecheck:
+	grype --add-cpes-if-none ${IMAGEFULLNAME}:latest > cve-report.md
+
 go-fmt:
 	@gofmt -w .
 
-update-gomod:
-	go get -u
-
 push:
-	@echo ">>>> Publish docker image: " ${BRANCH}
-	@docker buildx build --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:latest .
-	@docker buildx build --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:${BRANCH} .
+	@echo ">>>> Publish docker image: " ${BRANCH} ${BRANCHSHORT}
+	-docker buildx create --use --name buildkit
+	@docker buildx build --sbom=true --provenance=true --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:${BRANCH} .
+	@docker buildx build --sbom=true --provenance=true --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:${BRANCHSHORT} .
+	@docker buildx build --sbom=true --provenance=true --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:latest .
+	-docker buildx rm buildkit
 
-check: go-fmt sboom seccheck
-all: submodule-update check build-vmm build
+
+check: go-fmt sboom seccheck imagecheck
+all: check submodule-update check build
 vmm: build-vmm 

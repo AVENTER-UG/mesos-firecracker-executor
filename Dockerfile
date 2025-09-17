@@ -1,4 +1,9 @@
-FROM debian:11
+FROM debian:12
+LABEL maintainer="Andreas Peters <support@aventer.biz>"
+LABEL org.opencontainers.image.title="mesos-firecracker-executor"
+LABEL org.opencontainers.image.description="ClusterD/Apache Mesos firecracker executor"
+LABEL org.opencontainers.image.vendor="AVENTER UG (haftungsbeschränkt)"
+LABEL org.opencontainers.image.source="https://github.com/AVENTER-UG/"
 
 RUN apt update && apt install -y wget iptables iproute2 curl
 RUN update-alternatives --set iptables /usr/sbin/iptables-legacy
