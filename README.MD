@@ -25,6 +25,10 @@ MESOS_ISOLATION=filesystem/linux,docker/runtime
 
 My mesos-compose framework will use the docker containerizer. These should work out of the box.
 
+## External Resources:
+
+- https://github.com/firecracker-microvm/firecracker/releases/tag/v1.13.1
+
 ## Build tab Interface for networking
 
 To get access into the microvm, we have to create a tap network interface on our host machine:

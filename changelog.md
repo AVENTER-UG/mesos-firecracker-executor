@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.0
+
+- UPDATE: Firecracker to v1.13.1
+- UPDATE: CNI to v1.8.0
+
 ## v0.1.0
 
 - First commit
