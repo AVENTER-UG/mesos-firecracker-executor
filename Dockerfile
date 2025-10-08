@@ -8,9 +8,9 @@ LABEL org.opencontainers.image.source="https://github.com/AVENTER-UG/"
 RUN apt update && apt install -y wget iptables iproute2 curl
 RUN update-alternatives --set iptables /usr/sbin/iptables-legacy
 
+COPY build/mesos-firecracker-executor /usr/bin/
 COPY resources/firecracker/firecracker /usr/bin/
 COPY resources/firecracker/jailer /usr/bin/
-COPY resources/firecracker/mesos-firecracker-executor /usr/bin/
 COPY resources/firecracker/rebase-snap /usr/bin/
 COPY resources/firecracker/seccomp-filter.json /usr/bin/
 COPY resources/fcnet.conflist /etc/cni/conf.d/

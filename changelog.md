@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.1
+
+- SECURITY: Update go modules
+- SECURITY: Update base image packages
+
 ## v0.2.0
 
 - UPDATE: Firecracker to v1.13.1

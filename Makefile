@@ -1,7 +1,7 @@
 #Dockerfile vars
 
 #vars
-TAG=v0.2.0
+TAG=v0.2.1
 UID=`id -u`
 GID=`id -g`
 BUILDDATE=${shell date -u +%Y-%m-%dT%H:%M:%SZ}
@@ -69,7 +69,7 @@ push:
 	-docker buildx create --use --name buildkit
 	@docker buildx build --sbom=true --provenance=true --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:${BRANCH} .
 	@docker buildx build --sbom=true --provenance=true --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:${BRANCHSHORT} .
-	@docker buildx build --sbom=true --provenance=true --platform linux/amd64 --push --build-arg TAG=${TAG} --build-arg BUILDDATE=${BUILDDATE} -t ${IMAGEFULLNAME}:latest .
+
 
 tc-redirect-tap:
 	$(call install_go,github.com/awslabs/tc-redirect-tap/cmd/tc-redirect-tap,latest)
@@ -84,5 +84,5 @@ firecracker:
 	rm -rf /tmp/release-$(firecracker_version)-$(ARCH)
 
 check: go-fmt sboom seccheck imagecheck
-all: submodule-update check tc-redirect firecracker build
+all: submodule-update check tc-redirect-tap firecracker build
 vmm: build-vmm 
